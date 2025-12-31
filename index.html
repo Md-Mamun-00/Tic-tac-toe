@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Voice Tic-Tac-Toe</title>
+    <!-- PeerJS for WebRTC signaling without a custom backend -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --danger: #ef4444;
+            --x-color: #38bdf8;
+            --o-color: #fb7185;
+            --border: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .app-container {
+            background: var(--card);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+        }
+
+        h1 {
+            margin-bottom: 1.5rem;
+            font-size: 1.75rem;
+            background: linear-gradient(to right, var(--x-color), var(--o-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* --- Screens --- */
+        .screen { display: none; }
+        .screen.active { display: block; }
+
+        /* --- Lobby UI --- */
+        .input-group {
+            margin: 1.5rem 0;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid var(--border);
+            background: #0f172a;
+            color: white;
+            font-size: 1.2rem;
+            text-align: center;
+            letter-spacing: 4px;
+            margin-bottom: 1rem;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background: var(--accent);
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 0.5rem;
+        }
+
+        button:hover { background: var(--accent-hover); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--border);
+        }
+        .btn-outline:hover { background: var(--border); }
+
+        .room-code-display {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin: 1rem 0;
+            letter-spacing: 8px;
+        }
+
+        /* --- Game Board --- */
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 1.5rem auto;
+            width: 300px;
+            height: 300px;
+        }
+
+        .cell {
+            background: var(--bg);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+        }
+
+        .cell:hover { background: #1e293b; }
+        .cell.x { color: var(--x-color); }
+        .cell.o { color: var(--o-color); }
+        .cell.taken { cursor: default; }
+
+        /* --- Voice Controls --- */
+        .voice-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+
+        .voice-btn {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            width: auto;
+        }
+
+        .mute-active { background: var(--danger); }
+        .mute-active:hover { background: #dc2626; }
+
+        .status-msg {
+            margin: 1rem 0;
+            font-weight: 500;
+            min-height: 1.5em;
+        }
+
+        .loader {
+            border: 3px solid var(--border);
+            border-radius: 50%;
+            border-top: 3px solid var(--accent);
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <h1>Voice Tic-Tac-Toe</h1>
+
+        <!-- LOBBY -->
+        <div id="screen-lobby" class="screen active">
+            <button id="btn-create">Create New Room</button>
+            <div style="margin: 1rem 0; opacity: 0.5;">— OR —</div>
+            <div class="input-group">
+                <input type="text" id="join-code" placeholder="ENTER 4-DIGIT CODE" maxlength="4">
+                <button id="btn-join" class="btn-outline">Join Friend</button>
+            </div>
+            <div id="lobby-error" style="color: var(--danger); font-size: 0.9rem;"></div>
+        </div>
+
+        <!-- WAITING -->
+        <div id="screen-waiting" class="screen">
+            <p>Your Room Code</p>
+            <div id="display-code" class="room-code-display">0000</div>
+            <p class="status-msg"><span class="loader"></span>Waiting for friend to join...</p>
+            <button onclick="location.reload()" class="btn-outline">Cancel</button>
+        </div>
+
+        <!-- GAME -->
+        <div id="screen-game" class="screen">
+            <div class="game-header">
+                <div id="player-label">You: ?</div>
+                <div id="turn-display">Turn: X</div>
+            </div>
+
+            <div class="status-msg" id="game-status">Game Started!</div>
+
+            <div class="board" id="board">
+                <div class="cell" data-index="0"></div>
+                <div class="cell" data-index="1"></div>
+                <div class="cell" data-index="2"></div>
+                <div class="cell" data-index="3"></div>
+                <div class="cell" data-index="4"></div>
+                <div class="cell" data-index="5"></div>
+                <div class="cell" data-index="6"></div>
+                <div class="cell" data-index="7"></div>
+                <div class="cell" data-index="8"></div>
+            </div>
+
+            <div class="voice-controls">
+                <button id="btn-voice-toggle" class="voice-btn">🎤 Disable Voice</button>
+                <button id="btn-reset" class="voice-btn btn-outline" style="display: none;">Rematch</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden audio for remote voice -->
+    <audio id="remote-audio" autoplay></audio>
+
+    <script>
+        // Use a unique prefix to ensure we don't clash with other PeerJS users
+        const APP_ID_PREFIX = "VTTT-ROOM-";
+        
+        let peer = null;
+        let conn = null;
+        let call = null;
+        let localStream = null;
+        let myRole = ''; // 'X' (host) or 'O' (joiner)
+        let currentTurn = 'X';
+        let gameState = Array(9).fill(null);
+        let gameActive = true;
+        let voiceEnabled = true;
+
+        const screens = {
+            lobby: document.getElementById('screen-lobby'),
+            waiting: document.getElementById('screen-waiting'),
+            game: document.getElementById('screen-game')
+        };
+
+        function showScreen(name) {
+            Object.values(screens).forEach(s => s.classList.remove('active'));
+            screens[name].classList.add('active');
+        }
+
+        // --- P2P Signaling Logic ---
+
+        document.getElementById('btn-create').onclick = () => {
+            const code = Math.floor(1000 + Math.random() * 9000).toString();
+            initPeer(code, true);
+        };
+
+        document.getElementById('btn-join').onclick = () => {
+            const code = document.getElementById('join-code').value;
+            if (code.length !== 4) return alert("Enter 4 digits");
+            initPeer(code, false);
+        };
+
+        async function initPeer(code, isHost) {
+            const peerId = isHost ? APP_ID_PREFIX + code : null;
+            peer = new Peer(peerId);
+
+            peer.on('open', (id) => {
+                if (isHost) {
+                    myRole = 'X';
+                    document.getElementById('display-code').innerText = code;
+                    showScreen('waiting');
+                } else {
+                    myRole = 'O';
+                    const targetId = APP_ID_PREFIX + code;
+                    connectToHost(targetId);
+                }
+            });
+
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupDataHandlers();
+                startVoiceCall();
+            });
+
+            peer.on('call', (incomingCall) => {
+                setupVoice(incomingCall);
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                document.getElementById('lobby-error').innerText = "Connection Error. Try a different code.";
+                if (!isHost) showScreen('lobby');
+            });
+        }
+
+        function connectToHost(targetId) {
+            conn = peer.connect(targetId);
+            conn.on('open', () => {
+                setupDataHandlers();
+                startVoiceCall(targetId);
+            });
+        }
+
+        async function startVoiceCall(targetId) {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                if (targetId) {
+                    const outgoingCall = peer.call(targetId, localStream);
+                    setupVoice(outgoingCall);
+                }
+            } catch (e) {
+                console.warn("No mic access", e);
+                document.getElementById('btn-voice-toggle').style.display = 'none';
+            }
+        }
+
+        function setupVoice(mediaCall) {
+            call = mediaCall;
+            if (localStream) call.answer(localStream);
+            else call.answer(); // Answer without sending stream if mic blocked
+
+            call.on('stream', (remoteStream) => {
+                document.getElementById('remote-audio').srcObject = remoteStream;
+            });
+        }
+
+        // --- Data & Game Logic ---
+
+        function setupDataHandlers() {
+            showScreen('game');
+            document.getElementById('player-label').innerText = `You: ${myRole}`;
+            updateStatus();
+
+            conn.on('data', (data) => {
+                if (data.type === 'move') {
+                    handleMove(data.index, data.role);
+                } else if (data.type === 'reset') {
+                    performReset();
+                }
+            });
+
+            conn.on('close', () => {
+                alert("Peer disconnected");
+                location.reload();
+            });
+        }
+
+        function handleMove(index, role) {
+            if (gameState[index] || !gameActive) return;
+
+            gameState[index] = role;
+            const cell = document.querySelector(`[data-index="${index}"]`);
+            cell.innerText = role;
+            cell.classList.add(role.toLowerCase(), 'taken');
+
+            checkWinner();
+            if (gameActive) {
+                currentTurn = currentTurn === 'X' ? 'O' : 'X';
+                updateStatus();
+            }
+        }
+
+        const cells = document.querySelectorAll('.cell');
+        cells.forEach(cell => {
+            cell.onclick = () => {
+                const index = cell.dataset.index;
+                if (currentTurn === myRole && !gameState[index] && gameActive) {
+                    handleMove(index, myRole);
+                    conn.send({ type: 'move', index, role: myRole });
+                }
+            };
+        });
+
+        function updateStatus() {
+            const turnDisp = document.getElementById('turn-display');
+            const statusDisp = document.getElementById('game-status');
+            
+            turnDisp.innerText = `Turn: ${currentTurn}`;
+            if (currentTurn === myRole) {
+                statusDisp.innerText = "Your turn!";
+                statusDisp.style.color = "var(--accent)";
+            } else {
+                statusDisp.innerText = "Waiting for opponent...";
+                statusDisp.style.color = "var(--text)";
+            }
+        }
+
+        function checkWinner() {
+            const wins = [
+                [0,1,2], [3,4,5], [6,7,8],
+                [0,3,6], [1,4,7], [2,5,8],
+                [0,4,8], [2,4,6]
+            ];
+
+            for (let combo of wins) {
+                const [a, b, c] = combo;
+                if (gameState[a] && gameState[a] === gameState[b] && gameState[a] === gameState[c]) {
+                    gameActive = false;
+                    announceWinner(gameState[a]);
+                    return;
+                }
+            }
+
+            if (!gameState.includes(null)) {
+                gameActive = false;
+                announceWinner('Draw');
+            }
+        }
+
+        function announceWinner(winner) {
+            const statusDisp = document.getElementById('game-status');
+            document.getElementById('btn-reset').style.display = 'block';
+
+            if (winner === 'Draw') {
+                statusDisp.innerText = "It's a Draw!";
+                statusDisp.style.color = "var(--text)";
+            } else {
+                statusDisp.innerText = winner === myRole ? "You Won! 🎉" : "Opponent Won! 💀";
+                statusDisp.style.color = winner === myRole ? "var(--accent)" : "var(--danger)";
+            }
+        }
+
+        // --- Controls ---
+
+        document.getElementById('btn-reset').onclick = () => {
+            performReset();
+            conn.send({ type: 'reset' });
+        };
+
+        function performReset() {
+            gameState.fill(null);
+            gameActive = true;
+            currentTurn = 'X';
+            cells.forEach(c => {
+                c.innerText = '';
+                c.className = 'cell';
+            });
+            document.getElementById('btn-reset').style.display = 'none';
+            updateStatus();
+        }
+
+        document.getElementById('btn-voice-toggle').onclick = () => {
+            if (!localStream) return;
+            voiceEnabled = !voiceEnabled;
+            localStream.getAudioTracks().forEach(track => track.enabled = voiceEnabled);
+            
+            const btn = document.getElementById('btn-voice-toggle');
+            btn.innerText = voiceEnabled ? "🎤 Disable Voice" : "🔇 Enable Voice";
+            btn.classList.toggle('mute-active', !voiceEnabled);
+        };
+    </script>
+</body>
+</html>
+
