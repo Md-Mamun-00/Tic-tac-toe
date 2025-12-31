@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tic-Tac-Toe Bot</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: rgba(30, 41, 59, 0.85);
+            --text: #f8fafc;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --danger: #ef4444;
+            --x-color: #38bdf8;
+            --o-color: #fb7185;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at top left, #1e293b, #0f172a);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 15px;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        .app-container {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 1.5rem;
+            border-radius: 2rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        h1 {
+            margin-bottom: 1.5rem;
+            font-size: 1.75rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(to right, var(--x-color), var(--o-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .screen { display: none; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; }
+        .screen.active { display: block; opacity: 1; transform: translateY(0); }
+
+        .level-select {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        button {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            border: none;
+            background: var(--accent);
+            color: white;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button:active { transform: scale(0.96); }
+        .btn-outline { background: rgba(255,255,255,0.05); border: 1px solid var(--border); }
+        .btn-danger { background: var(--danger); }
+        
+        .level-btn[data-lvl="normal"] { background: #3b82f6; }
+        .level-btn[data-lvl="mediocre"] { background: #f59e0b; }
+        .level-btn[data-lvl="advanced"] { background: #8b5cf6; }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 10px 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 1rem auto;
+            width: 100%;
+            max-width: 320px;
+            aspect-ratio: 1 / 1;
+        }
+
+        .cell {
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(2rem, 10vw, 3rem);
+            font-weight: 900;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+            height: 100%;
+        }
+
+        .cell.x { color: var(--x-color); text-shadow: 0 0 10px var(--x-color); }
+        .cell.o { color: var(--o-color); text-shadow: 0 0 10px var(--o-color); }
+
+        .emoji-bar {
+            display: flex;
+            justify-content: space-around;
+            gap: 5px;
+            margin-top: 1rem;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 15px;
+        }
+
+        .emoji-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+            width: auto;
+        }
+
+        .thrown-emoji {
+            position: fixed;
+            font-size: 4rem;
+            pointer-events: none;
+            z-index: 100;
+            animation: fly-emoji 1.2s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+        }
+
+        @keyframes fly-emoji {
+            0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; top: 85%; left: 50%; }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.6); }
+            100% { transform: translate(-50%, -50%) scale(1) translateY(-45vh); opacity: 0; top: 50%; left: 50%; }
+        }
+        
+        .status-msg { margin: 0.75rem 0; font-weight: 600; min-height: 1.5em; display: flex; align-items: center; justify-content: center; gap: 8px;}
+        
+        #btn-restart { margin-top: 15px; display: none; }
+        #btn-back { margin-top: 5px; font-size: 0.8rem; padding: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <h1>Tic Tac Toe</h1>
+
+        <!-- Level Selection Screen -->
+        <div id="screen-lvl" class="screen active">
+            <p style="margin-bottom: 1.5rem; opacity: 0.8;">Choose your opponent</p>
+            <div class="level-select">
+                <button class="level-btn" data-lvl="normal">Normal 🤓</button>
+                <button class="level-btn" data-lvl="mediocre">Mediocre 😎</button>
+                <button class="level-btn" data-lvl="advanced">Advanced 🤖</button>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="screen-game" class="screen">
+            <div class="game-header">
+                <div id="player-label">You (X) vs Bot (O)</div>
+                <div id="turn-display">Turn: X</div>
+            </div>
+            <div class="status-msg" id="game-status">Match Started</div>
+            <div class="board" id="board">
+                <div class="cell" data-index="0"></div>
+                <div class="cell" data-index="1"></div>
+                <div class="cell" data-index="2"></div>
+                <div class="cell" data-index="3"></div>
+                <div class="cell" data-index="4"></div>
+                <div class="cell" data-index="5"></div>
+                <div class="cell" data-index="6"></div>
+                <div class="cell" data-index="7"></div>
+                <div class="cell" data-index="8"></div>
+            </div>
+            <div class="emoji-bar">
+                <button class="emoji-btn" onclick="throwEmoji('🔥')">🔥</button>
+                <button class="emoji-btn" onclick="throwEmoji('😂')">😂</button>
+                <button class="emoji-btn" onclick="throwEmoji('🤯')">🤯</button>
+                <button class="emoji-btn" onclick="throwEmoji('👋')">👋</button>
+                <button class="emoji-btn" onclick="throwEmoji('😎')">😎</button>
+            </div>
+            <button id="btn-restart" class="btn-outline">Rematch</button>
+            <button id="btn-back" class="btn-outline" onclick="location.reload()">Back to Menu</button>
+        </div>
+    </div>
+
+    <script>
+        let currentLvl = 'normal';
+        let currentTurn = 'X';
+        let gameState = Array(9).fill(null);
+        let gameActive = true;
+        const playerMark = 'X';
+        const botMark = 'O';
+
+        const screens = {
+            lvl: document.getElementById('screen-lvl'),
+            game: document.getElementById('screen-game')
+        };
+
+        function showScreen(name) {
+            Object.values(screens).forEach(s => s.classList.remove('active'));
+            setTimeout(() => screens[name].classList.add('active'), 50);
+        }
+
+        // --- Bot Logic ---
+        const winPatterns = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+        function getEmptyCells(state) {
+            return state.map((v, i) => v === null ? i : null).filter(v => v !== null);
+        }
+
+        function checkWin(state, player) {
+            return winPatterns.some(pattern => pattern.every(idx => state[idx] === player));
+        }
+
+        // Minimax for Advanced mode
+        function minimax(state, depth, isMaximizing) {
+            if (checkWin(state, botMark)) return 10 - depth;
+            if (checkWin(state, playerMark)) return depth - 10;
+            if (getEmptyCells(state).length === 0) return 0;
+
+            if (isMaximizing) {
+                let bestScore = -Infinity;
+                getEmptyCells(state).forEach(idx => {
+                    state[idx] = botMark;
+                    let score = minimax(state, depth + 1, false);
+                    state[idx] = null;
+                    bestScore = Math.max(score, bestScore);
+                });
+                return bestScore;
+            } else {
+                let bestScore = Infinity;
+                getEmptyCells(state).forEach(idx => {
+                    state[idx] = playerMark;
+                    let score = minimax(state, depth + 1, true);
+                    state[idx] = null;
+                    bestScore = Math.min(score, bestScore);
+                });
+                return bestScore;
+            }
+        }
+
+        function getBotMove() {
+            const empty = getEmptyCells(gameState);
+            
+            if (currentLvl === 'normal') {
+                return empty[Math.floor(Math.random() * empty.length)];
+            }
+
+            if (currentLvl === 'mediocre') {
+                // 1. Try to win
+                for (let idx of empty) {
+                    let temp = [...gameState]; temp[idx] = botMark;
+                    if (checkWin(temp, botMark)) return idx;
+                }
+                // 2. Try to block
+                for (let idx of empty) {
+                    let temp = [...gameState]; temp[idx] = playerMark;
+                    if (checkWin(temp, playerMark)) return idx;
+                }
+                // 3. Random but slightly smart (prefers center)
+                if (empty.includes(4)) return 4;
+                return empty[Math.floor(Math.random() * empty.length)];
+            }
+
+            if (currentLvl === 'advanced') {
+                let bestScore = -Infinity;
+                let move;
+                empty.forEach(idx => {
+                    gameState[idx] = botMark;
+                    let score = minimax(gameState, 0, false);
+                    gameState[idx] = null;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        move = idx;
+                    }
+                });
+                return move;
+            }
+        }
+
+        // --- Game Interactions ---
+
+        document.querySelectorAll('.level-btn').forEach(btn => {
+            btn.onclick = () => {
+                currentLvl = btn.dataset.lvl;
+                showScreen('game');
+                document.getElementById('player-label').innerText = `You vs Bot (${currentLvl.toUpperCase()})`;
+            };
+        });
+
+        function handleMove(index, role) {
+            if (gameState[index] || !gameActive) return;
+            
+            gameState[index] = role;
+            const cell = document.querySelector(`[data-index="${index}"]`);
+            cell.innerText = role;
+            cell.classList.add(role.toLowerCase());
+            
+            if (checkWin(gameState, role)) {
+                gameActive = false;
+                announceWinner(role);
+                return;
+            }
+
+            if (getEmptyCells(gameState).length === 0) {
+                gameActive = false;
+                announceWinner('Draw');
+                return;
+            }
+
+            currentTurn = currentTurn === 'X' ? 'O' : 'X';
+            updateStatus();
+
+            if (gameActive && currentTurn === botMark) {
+                setTimeout(botTurn, 600);
+            }
+        }
+
+        function botTurn() {
+            const move = getBotMove();
+            handleMove(move, botMark);
+            
+            // Bot Emojis
+            const botEmojis = ['😈', '🤖', '🦾', '🤫', '💀'];
+            if (Math.random() > 0.7) {
+                setTimeout(() => animateEmoji(botEmojis[Math.floor(Math.random() * botEmojis.length)]), 200);
+            }
+        }
+
+        document.querySelectorAll('.cell').forEach(cell => {
+            cell.onclick = () => {
+                const index = cell.dataset.index;
+                if (currentTurn === playerMark && !gameState[index] && gameActive) {
+                    handleMove(index, playerMark);
+                }
+            };
+        });
+
+        function throwEmoji(emoji) {
+            animateEmoji(emoji);
+        }
+
+        function animateEmoji(emoji) {
+            const el = document.createElement('div');
+            el.className = 'thrown-emoji';
+            el.innerText = emoji;
+            el.style.left = (Math.random() * 60 + 20) + '%';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1200);
+        }
+
+        function updateStatus() {
+            const turnDisp = document.getElementById('turn-display');
+            const statusDisp = document.getElementById('game-status');
+            turnDisp.innerText = `Turn: ${currentTurn}`;
+            turnDisp.style.color = currentTurn === 'X' ? 'var(--x-color)' : 'var(--o-color)';
+            statusDisp.innerText = currentTurn === playerMark ? "Your Turn" : "Bot is thinking...";
+            statusDisp.style.color = currentTurn === playerMark ? 'var(--accent)' : 'var(--text)';
+        }
+
+        function announceWinner(winner) {
+            const statusDisp = document.getElementById('game-status');
+            document.getElementById('btn-restart').style.display = 'block';
+            
+            if (winner === 'Draw') {
+                statusDisp.innerText = "It's a Draw! 🤝";
+                statusDisp.style.color = "white";
+                animateEmoji('🤝');
+            } else if (winner === playerMark) {
+                statusDisp.innerText = "You Beat the Bot! 🎉";
+                statusDisp.style.color = "var(--accent)";
+                animateEmoji('👑');
+            } else {
+                statusDisp.innerText = "Bot Won! 🤖";
+                statusDisp.style.color = "var(--danger)";
+                animateEmoji('💩');
+            }
+        }
+
+        document.getElementById('btn-restart').onclick = () => {
+            gameState.fill(null);
+            gameActive = true;
+            currentTurn = 'X';
+            document.querySelectorAll('.cell').forEach(c => {
+                c.innerText = '';
+                c.classList.remove('x', 'o');
+            });
+            document.getElementById('btn-restart').style.display = 'none';
+            updateStatus();
+        };
+    </script>
+</body>
+</html>
+
+  
